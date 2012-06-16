@@ -1,82 +1,49 @@
-# Cinch-IMDb - IMDb.com plugin
+# Cinch-BGG - BoardGameGeek plugin
 
 ## Description
 
-This plugin uses the [Film Buff gem](https://github.com/sachse/filmbuff) to access data from IMDb.com.
+This is a BoardGameGeek plugin for Cinch bots. Handcrafted for #boardgames on freenode.
 
 ## Installation
 
 ### RubyGems
 
-You can install the latest Cinch-IMDb gem using RubyGems
+You can install the latest Cinch-BGG gem using RubyGems
 
-    gem install cinch-imdb
+    gem install cinch-bgg
 
 ### GitHub
 
 Alternatively you can check out the latest code directly from Github
 
-    git clone http://github.com/sachse/cinch-imdb.git
+    git clone http://github.com/caitlin/cinch-bgg.git
 
 ## Usage
 
 Install the gem and load it in your Cinch bot:
 
     require "cinch"
-    require "cinch/plugins/imdb"
+    require "cinch/plugins/bgg"
 
     bot = Cinch::Bot.new do
       configure do |c|
         # add all required options here
-        c.plugins.plugins = [Cinch::Plugins::IMDb] # optionally add more plugins
+        c.plugins.plugins = [Cinch::Plugins::Bgg] # optionally add more plugins
       end
     end
 
     bot.start
 
-If you want to return results in other languages this is possible as well. The supported locales are "de_DE", "en_US", "es_ES", "fr_FR", "it_IT" and "pt_PT" with "en_US" being the default.
-
-    require "cinch"
-    require "cinch/plugins/imdb"
-
-    bot = Cinch::Bot.new do
-      configure do |c|
-        # add all required options here
-        c.plugins.plugins = [Cinch::Plugins::IMDb] # optionally add more plugins
-        c.plugins.options[Cinch::Plugins::IMDb][:locale] = "de_DE"
-      end
-    end
-
-    bot.start
 
 ## Commands
 
-### imdb
+### !bgg
 
-By default the bot will reply with "Title (Year) - Rating/10 - IMDb link"
-e.g. "The Wizard of Oz (1939) - 8.3/10 - http://www.imdb.com/title/tt0032138"
+The bot will reply with "Title (Year) - Rating - Rank - Designer(s) - Mechanics - BGG Link"
+e.g. "Dominion (2008) - 7.94377 - Rank: 11 - Designer: Donald X. Vaccarino - Mechanics: Card Drafting, Deck / Pool Building, Hand Management - http://boardgamegeek.com/boardgame/36218"
 
-With a German locale (de_DE) the bot would instead reply with "Das zauberhafte Land (1939) - 8.3/10 - http://www.imdb.com/title/tt0032138"
+### !bgguser
 
-If you want to change the output format this can be done in imdb.rb
-The amount of information available is dependent on the Film Buff gem, which is used for accessing IMDb.com - At the time of writing the following information is accessible:
+The bot will reply with "Username - Collection Size - Top 5 Games - BGG Profile Link"
+e.g. "nolemonplease - Collection: 94 - Top 5: Battlestar Galactica, Space Alert, Mage Knight: Board Game, Trajan, Troyes - http://boardgamegeek.com/user/nolemonplease"
 
-- Title
-- Tagline
-- Plot
-- Runtime
-- Rating
-- Amount of votes
-- Poster URL
-- Genres
-- Release date
-- IMDb ID
-
-## Authors
-
-* [Kristoffer Sachse](https://github.com/sachse)
-
-## Contribute
-
-Fork the project, implement your changes in it's own branch, and send
-a pull request to me. I'll gladly consider any help or ideas.
