@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |s|
   s.name        = "cinch-bgg"
-  s.version     = "0.0.1"
+  s.version     = "0.0.2"
   s.platform    = Gem::Platform::RUBY
   s.authors     = ["Caitlin Woodward"]
   s.email       = ["caitlin@caitlinwoodward.me"]
@@ -10,9 +10,7 @@ Gem::Specification.new do |s|
   s.summary     = %q{Gives Cinch IRC bots access to BoardGameGeek data}
   s.description = %q{Gives Cinch IRC bots access to BoardGameGeek data}
 
-  s.rubyforge_project = "cinch-bgg"
-
-  s.add_dependency("cinch", "~> 1.0")
+  s.add_dependency("cinch", "~> 2.0")
   s.add_dependency("nokogiri", "~> 1.5.2")
 
   s.files         = `git ls-files`.split("\n")
