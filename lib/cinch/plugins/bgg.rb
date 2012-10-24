@@ -18,7 +18,12 @@ module Cinch
 
       match /link_bgg (.+)/i,   method: :link_to_bgg
 
-      match /whohas (.+)/i,     method: :who_has_game
+      match /whohas (.+)/i,      method: :who_has_game
+      match /whotrading (.+)/i,  method: :who_is_trading_game
+      match /whowants (.+)/i,    method: :who_wants_game
+      match /whorated (.+)/i,    method: :who_rated_game
+      match /whoplayed (.+)/i,   method: :who_played_game
+
 
       def initialize(*args)
         super
@@ -39,8 +44,8 @@ module Cinch
         unless nick.start_with?("-u ")
           if self.in_community?(nick)
             name = self.find_bgg_by_irc(nick)
-            user = search_for_user(name)
-            m.reply "#{user.name} - Collection: #{user.collection.size} - Top 5: #{user.top_games.first(5).join(", ")} - http://boardgamegeek.com/user/#{user.name}", true
+            user = search_for_user(m, name)
+            self.show_user_details(m, user)
           else
             m.reply "There's no \"#{nick}\" in the community. To link yourself and join the community, \"!link_bgg bgg_username\". To search by actual bgg username, \"!bgguser -u bgg_username\".", true
           end
@@ -48,16 +53,21 @@ module Cinch
       end
 
       def bggself(m)
-        self.bgguser(m.user.nick)
+        self.bgguser(m, m.user.nick)
       end
 
       def bggactualuser(m, nick)
         user = search_for_user(nick)
-        m.reply "#{user.name} - Collection: #{user.collection.size} - Top 5: #{user.top_games.first(5).join(", ")} - http://boardgamegeek.com/user/#{user.name}", true        
+        self.show_user_details(m, user)
+      end
+
+      def show_user_details(m, user)
+        top5 = (user.top_games.empty? ? "" : "- Top 5: #{user.top_games.first(5).join(", ")} ")
+        m.reply "#{user.name} - Collection: #{user.owned.size} #{top5}- http://boardgamegeek.com/user/#{user.name}", true
       end
 
       def link_to_bgg(m, username)
-        @community[m.user.nick] = username
+        @community[m.user.nick.downcase] = username
         File.open("#{@data_dir}#{USERS_FILE}", 'w') do |file|
           @community.each do |irc_nick, bgg_name|
             file.write("#{irc_nick},#{bgg_name}\n")
@@ -67,13 +77,38 @@ module Cinch
       end
 
       def who_has_game(m, title)
+        self.who_what_a_game(m, title, :owned, "Owning")
+      end
+
+      def who_is_trading_game(m, title)
+        self.who_what_a_game(m, title, :trading, "Trading")
+      end
+
+      def who_wants_game(m, title)
+        self.who_what_a_game(m, title, :wanted, "Wants")
+      end
+
+      def who_rated_game(m, title)
+        self.who_what_a_game(m, title, :rated, "Rated", "rating")
+      end
+
+      def who_played_game(m, title)
+        self.who_what_a_game(m, title, :played, "Played", "plays")
+      end
+
+      def who_what_a_game(m, title, action, string, with_number_info = nil)
         game = search_bgg(m, title)
         unless game.nil?
           community = @community.dup
-          community.each{ |irc, bgg| community[irc] = search_for_user(bgg, { :id => game.id, :use_cache => true }) }
+          community.each{ |irc, bgg| community[irc] = search_for_user(m, bgg, { :id => game.id, :use_cache => true }) }
           
-          community.keep_if{ |irc, user| user.collection.include? game.id.to_s }
-            m.reply "Owning \"#{game.name}\": #{community.keys.map{|n| self.dehighlight_nick(n)}.join(", ")}", true
+          community.keep_if{ |irc, user| user.send(action).include? game.id.to_s }
+          user_info = []
+          community.each do |irc, user|
+            number_info = with_number_info.nil? ? "" : " (#{user.send(action)[game.id.to_s][with_number_info].to_s})"
+            user_info << "#{self.dehighlight_nick(irc)}#{number_info}"
+          end
+          m.reply "#{string} \"#{game.name}\": #{user_info.join(", ")}", true
         end
       end
 
@@ -83,9 +118,9 @@ module Cinch
       protected
 
       def search_bgg(m, search_string)
-        search_results_xml = Nokogiri::XML(open("http://boardgamegeek.com/xmlapi2/search?query=#{search_string.gsub(" ", "%20")}&type=boardgame&exact=1").read)
+        search_results_xml = Nokogiri::XML(self.connect_to_bgg(m){ open("http://boardgamegeek.com/xmlapi2/search?query=#{search_string.gsub(" ", "%20")}&type=boardgame&exact=1") }.read)
         if search_results_xml.css('items')[0]['total'] == "0"
-          search_results_xml = Nokogiri::XML(open("http://boardgamegeek.com/xmlapi2/search?query=#{search_string.gsub(" ", "%20")}&type=boardgame").read)
+          search_results_xml = Nokogiri::XML(self.connect_to_bgg(m){ open("http://boardgamegeek.com/xmlapi2/search?query=#{search_string.gsub(" ", "%20")}&type=boardgame") }.read)
         end
         search_results = search_results_xml.css('item').map { |i| i['id'].to_i }
         
@@ -113,12 +148,12 @@ module Cinch
         Nokogiri::XML(File.open("#{@data_dir}#{GAMES_SUBDIR}/#{game_id}.xml"))
       end
 
-      def search_for_user(name, collection_options = {})
+      def search_for_user(m, name, collection_options = {})
         use_cache = collection_options[:use_cache] || false
         game_id   = collection_options[:id] || nil
 
         search_game_id_str = (game_id.nil? ? "" : "&id=#{game_id}")
-        user_xml = Nokogiri::XML(open("http://boardgamegeek.com/xmlapi2/user?name=#{name}&hot=1&top=1#{search_game_id_str}").read)
+        user_xml = Nokogiri::XML(self.connect_to_bgg(m){ open("http://boardgamegeek.com/xmlapi2/user?name=#{name}&hot=1&top=1#{search_game_id_str}")}.read)
         collection_xml = get_collection_data_for_user(name, use_cache)
         User.new(name, user_xml, collection_xml)
       end
@@ -127,7 +162,7 @@ module Cinch
         file_url = "#{@data_dir}#{USERS_SUBDIR}/#{name}.xml"
         unless using_cache
           open(file_url, "w") do |file|
-            open("http://boardgamegeek.com/xmlapi2/collection?username=#{name}&own=1&stats=1") do |uri|
+            open("http://boardgamegeek.com/xmlapi2/collection?username=#{name}&stats=1" ) do |uri|
                file.write(uri.read)
             end
           end
@@ -146,7 +181,7 @@ module Cinch
       end
 
       def find_bgg_by_irc(irc_nick)
-        @community[irc_nick]
+        @community[irc_nick.downcase]
       end
 
       def in_community?(irc_nick)
@@ -156,6 +191,30 @@ module Cinch
       def dehighlight_nick(nickname)
         nickname.chars.to_a * 8203.chr('UTF-8')
       end
+
+      def connect_to_bgg(m)
+        if block_given?
+          begin
+            yield
+          rescue Exception => e
+            case e
+              when Timeout::Error
+                error = 'BGG timeout'
+              when Errno::ECONNREFUSED
+                error = 'BGG connection refused'
+              when Errno::ECONNRESET
+                error = 'BGG connection reset'
+              when Errno::EHOSTUNREACH
+                error = 'BGG host not reachable'
+              else
+                error = "BGG unknown #{e.to_s}"
+              
+            end
+            m.reply "#{error}. Please try again.", true
+          end
+        end
+      end
+
 
     end
 
@@ -200,11 +259,32 @@ module Cinch
         collection_xml.css("items item").each do |g| 
           self.collection[g["objectid"]]              = {}
           self.collection[g["objectid"]]["name"]      = g.css("name")[0].content
-          self.collection[g["objectid"]]["for_trade"] = g.css("status fortrade")[0]
-          self.collection[g["objectid"]]["want"]      = g.css("status want")[0]
+          self.collection[g["objectid"]]["own"]       = g.css("status")[0]['own'].to_i
+          self.collection[g["objectid"]]["for_trade"] = g.css("status")[0]['fortrade'].to_i
+          self.collection[g["objectid"]]["want"]      = g.css("status")[0]['want'].to_i
           self.collection[g["objectid"]]["plays"]     = g.css("numplays")[0].content.to_i
-          self.collection[g["objectid"]]["ratings"]   = g.css("stats")[0].css("rating")[0]['value']
+          self.collection[g["objectid"]]["rating"]    = g.css("stats")[0].css("rating")[0]['value']
         end
+      end
+
+      def owned
+        self.collection.select{ |id, game| game["own"] == 1 }
+      end
+
+      def trading
+        self.collection.select{ |id, game| game["for_trade"] == 1 }
+      end
+
+      def wanted
+        self.collection.select{ |id, game| game["want"] == 1 }
+      end
+
+      def rated
+        self.collection.reject{ |id, game| game["rating"] == "N/A" }
+      end
+
+      def played
+        self.collection.select{ |id, game| game["plays"] > 0 }
       end
 
     end
