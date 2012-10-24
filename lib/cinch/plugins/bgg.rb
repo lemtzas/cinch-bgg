@@ -57,7 +57,7 @@ module Cinch
       end
 
       def bggactualuser(m, nick)
-        user = search_for_user(nick)
+        user = search_for_user(m, nick)
         self.show_user_details(m, user)
       end
 
@@ -181,7 +181,7 @@ module Cinch
       end
 
       def find_bgg_by_irc(irc_nick)
-        @community[irc_nick.downcase]
+        @community[irc_nick]
       end
 
       def in_community?(irc_nick)
