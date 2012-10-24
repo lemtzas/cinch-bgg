@@ -73,7 +73,7 @@ module Cinch
           community.each{ |irc, bgg| community[irc] = search_for_user(bgg, { :id => game.id, :use_cache => true }) }
           
           community.keep_if{ |irc, user| user.collection.include? game.id.to_s }
-            m.reply "Owning \"#{game.name}\": #{community.keys.join(", ")}", true
+            m.reply "Owning \"#{game.name}\": #{community.keys.map{|n| self.dehighlight_nick(n)}.join(", ")}", true
         end
       end
 
@@ -151,6 +151,10 @@ module Cinch
 
       def in_community?(irc_nick)
         self.find_bgg_by_irc(irc_nick) != nil
+      end
+
+      def dehighlight_nick(nickname)
+        nickname.chars.to_a * 8203.chr('UTF-8')
       end
 
     end
