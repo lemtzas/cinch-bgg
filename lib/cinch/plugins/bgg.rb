@@ -67,7 +67,7 @@ module Cinch
       end
 
       def link_to_bgg(m, username)
-        @community[m.user.nick.downcase] = username
+        @community[m.user.nick] = username
         File.open("#{@data_dir}#{USERS_FILE}", 'w') do |file|
           @community.each do |irc_nick, bgg_name|
             file.write("#{irc_nick},#{bgg_name}\n")
