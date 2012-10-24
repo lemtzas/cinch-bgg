@@ -1,14 +1,15 @@
 require 'cinch'
 require 'open-uri'
 require 'nokogiri'
-require File.expand_path(File.dirname(__FILE__)) + '/lib/bgg_api'
 
 module Cinch
   module Plugins
     class Bgg
       include Cinch::Plugin
 
-      USERS_FILE = "data/users"
+      USERS_FILE   = "users_list"
+      USERS_SUBDIR = "users"
+      GAMES_SUBDIR = "games"
 
       match /bgg (.+)/i,        method: :bgg
       match /bggme/i,           method: :bggself
@@ -22,15 +23,15 @@ module Cinch
       def initialize(*args)
         super
 
-        @bgg = BggApi.new
+        @data_dir  = config[:data_dir]
         @community = load_community
       end
 
       def bgg(m, title)
         game = search_bgg(m, title)
         unless game.nil?
-          m.reply "#{game.name} (#{game.year}) - #{game.rating} - Rank: #{game.game_rank} - Designer: #{game.designers.join(", ")} - Mechanics: #{game.mechanics.join(", ")} - " <<
-            "http://boardgamegeek.com/boardgame/#{game.id}", true
+          m.reply "#{m.user.nick}: #{game.name} (#{game.year}) - #{game.rating} - Rank: #{game.game_rank} - Designer: #{game.designers.join(", ")} - Mechanics: #{game.mechanics.join(", ")} - " <<
+            "http://boardgamegeek.com/boardgame/#{game.id}"
         end
       end
 
@@ -57,7 +58,7 @@ module Cinch
 
       def link_to_bgg(m, username)
         @community[m.user.nick] = username
-        File.open(USERS_FILE, 'w') do |file|
+        File.open("#{@data_dir}#{USERS_FILE}", 'w') do |file|
           @community.each do |irc_nick, bgg_name|
             file.write("#{irc_nick},#{bgg_name}\n")
           end
@@ -69,7 +70,7 @@ module Cinch
         game = search_bgg(m, title)
         unless game.nil?
           community = @community.dup
-          community.each{ |irc, bgg| community[irc] = search_for_user(bgg, { :id => game.id }) }
+          community.each{ |irc, bgg| community[irc] = search_for_user(bgg, { :id => game.id, :use_cache => true }) }
           
           community.keep_if{ |irc, user| user.collection.include? game.id.to_s }
             m.reply "Owning \"#{game.name}\": #{community.keys.join(", ")}", true
@@ -82,17 +83,16 @@ module Cinch
       protected
 
       def search_bgg(m, search_string)
-        search_results = @bgg.search({:query => search_string, :type => 'boardgame', :exact => 1})
-        if search_results['total'] == "0"
-          search_results = @bgg.search({:query => search_string, :type => 'boardgame'})
+        search_results_xml = Nokogiri::XML(open("http://boardgamegeek.com/xmlapi2/search?query=#{search_string.gsub(" ", "%20")}&type=boardgame&exact=1").read)
+        if search_results_xml.css('items')[0]['total'] == "0"
+          search_results_xml = Nokogiri::XML(open("http://boardgamegeek.com/xmlapi2/search?query=#{search_string.gsub(" ", "%20")}&type=boardgame").read)
         end
-        search_results = search_results["item"].map { |i| i['id'].to_i }
+        search_results = search_results_xml.css('item').map { |i| i['id'].to_i }
         
-        # this is dumb, find a better way
         if search_results.empty?
-          m.reply "\"#{title}\" not found", true
+          m.reply "\"#{search_string}\" not found", true
         elsif search_results.size > 50
-          m.reply "\"#{title}\" was too broad of a search term", true
+          m.reply "\"#{search_string}\" was too broad of a search term", true
         else
           results = search_results.map do |id|
             Game.new(id, get_info_for_game(id))
@@ -103,32 +103,40 @@ module Cinch
       end
 
       def get_info_for_game(game_id)
-        unless File.exists?("data/#{game_id}.xml")
-          open("data/games/#{game_id}.xml", "wb") do |file|
+        unless File.exists?("#{@data_dir}#{GAMES_SUBDIR}/#{game_id}.xml")
+          open("#{@data_dir}#{GAMES_SUBDIR}/#{game_id}.xml", "wb") do |file|
             open("http://boardgamegeek.com/xmlapi2/thing?id=#{game_id}&stats=1") do |uri|
                file.write(uri.read)
             end
           end
         end
-        Nokogiri::XML(File.open("data/games/#{game_id}.xml"))
+        Nokogiri::XML(File.open("#{@data_dir}#{GAMES_SUBDIR}/#{game_id}.xml"))
       end
 
       def search_for_user(name, collection_options = {})
-        user = @bgg.user({:name => name, :hot => 1, :top => 1})      
-        collection = @bgg.collection({:username => name, :own => 1, :stats => 1}.merge(collection_options))   
-        puts "="*80
-        puts collection.inspect
-        puts "="*80
-                  
-        user = User.new(name, user, collection)
-        puts "="*80
-        puts user.inspect
-        puts "="*80
-        user
+        use_cache = collection_options[:use_cache] || false
+        game_id   = collection_options[:id] || nil
+
+        search_game_id_str = (game_id.nil? ? "" : "&id=#{game_id}")
+        user_xml = Nokogiri::XML(open("http://boardgamegeek.com/xmlapi2/user?name=#{name}&hot=1&top=1#{search_game_id_str}").read)
+        collection_xml = get_collection_data_for_user(name, use_cache)
+        User.new(name, user_xml, collection_xml)
+      end
+
+      def get_collection_data_for_user(name, using_cache = false)
+        file_url = "#{@data_dir}#{USERS_SUBDIR}/#{name}.xml"
+        unless using_cache
+          open(file_url, "w") do |file|
+            open("http://boardgamegeek.com/xmlapi2/collection?username=#{name}&own=1&stats=1") do |uri|
+               file.write(uri.read)
+            end
+          end
+        end
+        Nokogiri::XML(File.open(file_url))
       end
 
       def load_community
-        users_file = File.open(USERS_FILE)
+        users_file = File.open("#{@data_dir}#{USERS_FILE}")
         users = {}
         users_file.lines.each do |line|
           nicks = line.gsub("\n", "").split(",")
@@ -152,7 +160,7 @@ module Cinch
       
       NOT_RANKED_RANK = 10001
 
-      def initialize(id, xml)
+      def initialize(id, xml)        
         self.id          = id
         self.rating      = xml.css('statistics ratings average')[0]['value'].to_f
         self.rank        = xml.css('statistics ratings ranks rank')[0]["value"]
@@ -182,18 +190,16 @@ module Cinch
 
       def initialize(username, user_xml, collection_xml)
         self.name       = username
-        self.top_games  = user_xml["top"].nil? ? nil : user_xml["top"].select{|h| h["domain"] == "boardgame" }.first["item"].map{ |g| g["name"] }
-        self.hot_games  = user_xml["hot"].nil? ? nil : user_xml["hot"].select{|h| h["domain"] == "boardgame" }.first["item"].map{ |g| g["name"] }
+        self.top_games  = user_xml.css("top item").map{ |g| g["name"] }
+        self.hot_games  = user_xml.css("hot item").map{ |g| g["name"] }
         self.collection = {}
-        unless collection_xml["item"].nil?
-          collection_xml["item"].each do |g| 
-            self.collection[g["objectid"]] = {}
-            self.collection[g["objectid"]]["name"]      = g["name"].first["content"] 
-            self.collection[g["objectid"]]["for_trade"] = g["status"].first["fortrade"] 
-            self.collection[g["objectid"]]["want"]      = g["status"].first["want"] 
-            self.collection[g["objectid"]]["plays"]     = g["numplays"].first
-            self.collection[g["objectid"]]["ratings"]   = g["stats"].first["rating"].first["value"]
-          end
+        collection_xml.css("items item").each do |g| 
+          self.collection[g["objectid"]]              = {}
+          self.collection[g["objectid"]]["name"]      = g.css("name")[0].content
+          self.collection[g["objectid"]]["for_trade"] = g.css("status fortrade")[0]
+          self.collection[g["objectid"]]["want"]      = g.css("status want")[0]
+          self.collection[g["objectid"]]["plays"]     = g.css("numplays")[0].content.to_i
+          self.collection[g["objectid"]]["ratings"]   = g.css("stats")[0].css("rating")[0]['value']
         end
       end
 
