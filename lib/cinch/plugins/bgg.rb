@@ -101,7 +101,7 @@ module Cinch
         unless game.nil?
           community = @community.dup
           community.each{ |irc, bgg| community[irc] = search_for_user(m, bgg, { :id => game.id, :use_cache => true }) }
-          
+
           community.keep_if{ |irc, user| user.send(action).include? game.id.to_s }
           user_info = []
           community.each do |irc, user|
@@ -123,7 +123,7 @@ module Cinch
           search_results_xml = Nokogiri::XML(self.connect_to_bgg(m){ open("http://boardgamegeek.com/xmlapi2/search?query=#{search_string.gsub(" ", "%20")}&type=boardgame") }.read)
         end
         search_results = search_results_xml.css('item').map { |i| i['id'].to_i }
-        
+
         if search_results.empty?
           m.reply "\"#{search_string}\" not found", true
         elsif search_results.size > 50
@@ -176,7 +176,7 @@ module Cinch
         users_file.lines.each do |line|
           nicks = line.gsub("\n", "").split(",")
           users[nicks.first] = nicks.last
-        end        
+        end
         users
       end
 
@@ -208,7 +208,7 @@ module Cinch
                 error = 'BGG host not reachable'
               else
                 error = "BGG unknown #{e.to_s}"
-              
+
             end
             m.reply "#{error}. Please try again.", true
           end
@@ -220,10 +220,10 @@ module Cinch
 
     class Game
       attr_accessor :id, :rating, :rank, :name, :year, :minplayers, :maxplayers, :playingtime, :categories, :mechanics, :designers, :publishers
-      
+
       NOT_RANKED_RANK = 10001
 
-      def initialize(id, xml)        
+      def initialize(id, xml)
         self.id          = id
         self.rating      = xml.css('statistics ratings average')[0]['value'].to_f
         self.rank        = xml.css('statistics ratings ranks rank')[0]["value"]
@@ -239,11 +239,11 @@ module Cinch
         self.designers   = xml.css('link[type=boardgamedesigner]').map{ |l| l['value'] }
         self.publishers  = xml.css('link[type=boardgamepublisher]').map{ |l| l['value'] }
       end
-      
+
       # Since we are resetting the not ranked values, let's make sure  we return the correct values
       #
       def game_rank
-        (self.rank == NOT_RANKED_RANK) ? "Not Ranked" : self.rank  
+        (self.rank == NOT_RANKED_RANK) ? "Not Ranked" : self.rank
       end
     end
 
@@ -256,7 +256,7 @@ module Cinch
         self.top_games  = user_xml.css("top item").map{ |g| g["name"] }
         self.hot_games  = user_xml.css("hot item").map{ |g| g["name"] }
         self.collection = {}
-        collection_xml.css("items item").each do |g| 
+        collection_xml.css("items item").each do |g|
           self.collection[g["objectid"]]              = {}
           self.collection[g["objectid"]]["name"]      = g.css("name")[0].content
           self.collection[g["objectid"]]["own"]       = g.css("status")[0]['own'].to_i
