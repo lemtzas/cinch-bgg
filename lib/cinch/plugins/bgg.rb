@@ -108,8 +108,51 @@ module Cinch
             number_info = with_number_info.nil? ? "" : " (#{user.send(action)[game.id.to_s][with_number_info].to_s})"
             user_info << "#{self.dehighlight_nick(irc)}#{number_info}"
           end
-          m.reply "#{string} \"#{game.name}\": #{user_info.join(", ")}", true
+
+          self.reply_with_line_breaks(m, string, game.name, user_info)
         end
+      end
+
+      # This function replies to the requesting user with `user_info` results, broken into "acceptable" lines.
+      def reply_with_line_breaks(m, string, game_name, user_info)
+        # This keeps track of the largest string so far that's "acceptable".
+        acceptable_string = ""
+
+        # This keeps track of the next string we plan to text for "acceptability".
+        potential_string = ""
+
+        # This is the index of the next bit of user info we plan to add to the potential string.
+        index_to_add = 0
+        while index_to_add < user_info.length do
+          # Reset our acceptable string and create the beginning of a new potential string.
+          acceptable_string = ""
+          potential_string = "#{string} \"#{game_name}\": #{user_info[index_to_add]}"
+          index_to_add += 1
+
+          # Add to our potential string until we run out of user info or the potential string is unacceptable.
+          while index_to_add < user_info.length && is_acceptable?(potential_string) do
+            # Our potential string is acceptable!
+            acceptable_string = potential_string
+
+            # Add to our potential string.
+            potential_string += ", " + user_info[index_to_add]
+            index_to_add += 1
+          end
+
+          # If our potential string is too long, use the acceptable string and rewind.
+          # Otherwise, we've hit the end of the list—use the potential string and we're done!
+          if !is_acceptable?(potential_string)
+            m.reply(acceptable_string, true)
+            index_to_add -= 1
+          else
+            m.reply(potential_string, true)
+          end
+        end
+      end
+
+      # This function describes string "acceptability".
+      def is_acceptable?(string)
+        string.length < 200
       end
 
       #--------------------------------------------------------------------------------
