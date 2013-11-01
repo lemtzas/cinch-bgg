@@ -109,6 +109,14 @@ module Cinch
             user_info << "#{self.dehighlight_nick(irc)}#{number_info}"
           end
 
+          # If we have number info, use it to sort the user info.
+          # The sort criterion is the number inside the brackets (extracted via regex).
+          # We multiply this by -1 to have it sort descending.
+          if !with_number_info.nil?
+            user_info = user_info.sort_by { |info| info[/\((.*?)\)/, 1].to_f * -1 }
+          end
+
+          # Reply, breaking the response into acceptable lines.
           self.reply_with_line_breaks(m, string, game.name, user_info)
         end
       end
