@@ -123,10 +123,17 @@ module Cinch
 
         # This is the index of the next bit of user info we plan to add to the potential string.
         index_to_add = 0
+
         while index_to_add < user_info.length do
-          # Reset our acceptable string and create the beginning of a new potential string.
+          # Reset our acceptable string.
           acceptable_string = ""
-          potential_string = "#{string} \"#{game_name}\": #{user_info[index_to_add]}"
+
+          # Create the beginning of a new potential string.
+          # We only want the info type and game name the first time.
+          if index_to_add == 0
+            potential_string = "#{string} \"#{game_name}\": "
+          end
+          potential_string += user_info[index_to_add]
           index_to_add += 1
 
           # Add to our potential string until we run out of user info or the potential string is unacceptable.
