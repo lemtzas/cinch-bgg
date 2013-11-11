@@ -77,26 +77,26 @@ module Cinch
       end
 
       def who_has_game(m, title)
-        self.who_what_a_game(m, title, :owned, "Owning")
+        self.who_what_a_game(m, title, :owned, "Owning", nil, "owns")
       end
 
       def who_is_trading_game(m, title)
-        self.who_what_a_game(m, title, :trading, "Trading")
+        self.who_what_a_game(m, title, :trading, "Trading", nil, "is trading")
       end
 
       def who_wants_game(m, title)
-        self.who_what_a_game(m, title, :wanted, "Wants")
+        self.who_what_a_game(m, title, :wanted, "Wants", nil, "wants")
       end
 
       def who_rated_game(m, title)
-        self.who_what_a_game(m, title, :rated, "Rated", "rating")
+        self.who_what_a_game(m, title, :rated, "Rated", "rating", "has rated")
       end
 
       def who_played_game(m, title)
-        self.who_what_a_game(m, title, :played, "Played", "plays")
+        self.who_what_a_game(m, title, :played, "Played", "plays", "has played")
       end
 
-      def who_what_a_game(m, title, action, string, with_number_info = nil)
+      def who_what_a_game(m, title, action, string, with_number_info, verb)
         game = search_bgg(m, title)
         unless game.nil?
           community = @community.dup
@@ -116,8 +116,13 @@ module Cinch
             user_info = user_info.sort_by { |info| info[/\((.*?)\)/, 1].to_f * -1 }
           end
 
-          # Reply, breaking the response into acceptable lines.
-          self.reply_with_line_breaks(m, string, game.name, user_info)
+          # Reply appropriately, depending on whether we have any results.
+          if user_info.length == 0
+            m.reply("No one #{verb} #{game.name}.", true);
+          else
+            # Reply, breaking the response into acceptable lines.
+            self.reply_with_line_breaks(m, string, game.name, user_info)
+          end
         end
       end
 
