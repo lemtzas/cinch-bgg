@@ -24,6 +24,16 @@ module Cinch
       match /whorated (.+)/i,    method: :who_rated_game
       match /whoplayed (.+)/i,   method: :who_played_game
 
+      # This map keeps track of data for each action type.
+      def action_data
+        action_data = {}
+        action_data[:owned] = { string: "Owning", count_noun: nil, verb: "owns" }
+        action_data[:trading] = { string: "Trading", count_noun: nil, verb: "is trading" }
+        action_data[:wanted] = { string: "Wants", count_noun: nil, verb: "wants" }
+        action_data[:rated] = { string: "Rated", count_noun: "rating", verb: "has rated" }
+        action_data[:played] = { string: "Played", count_noun: "plays", verb: "has played" }
+        action_data
+      end
 
       def initialize(*args)
         super
@@ -77,26 +87,26 @@ module Cinch
       end
 
       def who_has_game(m, title)
-        self.who_what_a_game(m, title, :owned, "Owning")
+        self.who_what_a_game(m, title, :owned)
       end
 
       def who_is_trading_game(m, title)
-        self.who_what_a_game(m, title, :trading, "Trading")
+        self.who_what_a_game(m, title, :trading)
       end
 
       def who_wants_game(m, title)
-        self.who_what_a_game(m, title, :wanted, "Wants")
+        self.who_what_a_game(m, title, :wanted)
       end
 
       def who_rated_game(m, title)
-        self.who_what_a_game(m, title, :rated, "Rated", "rating")
+        self.who_what_a_game(m, title, :rated)
       end
 
       def who_played_game(m, title)
-        self.who_what_a_game(m, title, :played, "Played", "plays")
+        self.who_what_a_game(m, title, :played)
       end
 
-      def who_what_a_game(m, title, action, string, with_number_info = nil)
+      def who_what_a_game(m, title, action)
         game = search_bgg(m, title)
         unless game.nil?
           community = @community.dup
@@ -104,6 +114,7 @@ module Cinch
 
           community.keep_if{ |irc, user| user.send(action).include? game.id.to_s }
           user_info = []
+          with_number_info = action_data[action][:count_noun]
           community.each do |irc, user|
             number_info = with_number_info.nil? ? "" : " (#{user.send(action)[game.id.to_s][with_number_info].to_s})"
             user_info << "#{self.dehighlight_nick(irc)}#{number_info}"
@@ -116,8 +127,13 @@ module Cinch
             user_info = user_info.sort_by { |info| info[/\((.*?)\)/, 1].to_f * -1 }
           end
 
-          # Reply, breaking the response into acceptable lines.
-          self.reply_with_line_breaks(m, string, game.name, user_info)
+          # Reply appropriately, depending on whether we have any results.
+          if user_info.length == 0
+            m.reply("No one #{action_data[action][:verb]} #{game.name}.", true);
+          else
+            # Reply, breaking the response into acceptable lines.
+            self.reply_with_line_breaks(m, action_data[action][:string], game.name, user_info)
+          end
         end
       end
 
