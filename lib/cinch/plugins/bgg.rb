@@ -258,7 +258,7 @@ module Cinch
         end
         unless using_cache
           open(file_url, "w") do |file|
-            open("http://boardgamegeek.com/xmlapi2/collection?username=#{name}&subtype=boardgameexpansion" ) do |uri|
+            open("http://boardgamegeek.com/xmlapi2/collection?username=#{name}&excludesubtype=boardgameexpansion" ) do |uri|
                file.write(uri.read)
             end
           end
@@ -360,10 +360,10 @@ module Cinch
           self.collection[g["objectid"]]["want"]      = g.css("status")[0]['want'].to_i
           self.collection[g["objectid"]]["plays"]     = g.css("numplays")[0].content.to_i
           self.collection[g["objectid"]]["rating"]    = g.css("stats")[0].css("rating")[0]['value']
-          self.collection[g["objectid"]]["type"]      = g["subtype"]
+          self.collection[g["objectid"]]["type"]      = "boardgameexpansion"
         end
         expansion_xml.css("items item").each do |g| 
-          self.collection[g["objectid"]]["type"]      = g["subtype"]
+          self.collection[g["objectid"]]["type"]      = "boardgame"
         end
         
       end
