@@ -73,7 +73,7 @@ module Cinch
 
       def show_user_details(m, user)
         top5 = (user.top_games.empty? ? "" : "- Top 5: #{user.top_games.first(5).join(", ")} ")
-        m.reply "#{user.name} - Collection: #{user.owned.size} #{top5}- http://boardgamegeek.com/user/#{user.name}", true
+        m.reply "#{user.name} - Collection: #{user.ownedGames.size}g #{user.ownedExpansions.size}e #{top5}- http://boardgamegeek.com/user/#{user.name}", true
       end
 
       def link_to_bgg(m, username)
@@ -83,6 +83,8 @@ module Cinch
             file.write("#{irc_nick},#{bgg_name}\n")
           end
         end
+        collection_xml = get_collection_data_for_user(username, false)
+        expansion_xml = get_expansion_data_for_user(username, false)
         m.reply "You are now added to the community!", true
       end
 
@@ -230,11 +232,15 @@ module Cinch
         search_game_id_str = (game_id.nil? ? "" : "&id=#{game_id}")
         user_xml = Nokogiri::XML(self.connect_to_bgg(m){ open("http://boardgamegeek.com/xmlapi2/user?name=#{name}&hot=1&top=1#{search_game_id_str}")}.read)
         collection_xml = get_collection_data_for_user(name, use_cache)
-        User.new(name, user_xml, collection_xml)
+        expansion_xml = get_expansion_data_for_user(name, use_cache)
+        User.new(name, user_xml, collection_xml, expansion_xml)
       end
 
       def get_collection_data_for_user(name, using_cache = false)
         file_url = "#{@data_dir}#{USERS_SUBDIR}/#{name}.xml"
+        unless File.exists?(file_url)
+          using_cache = false
+        end
         unless using_cache
           open(file_url, "w") do |file|
             open("http://boardgamegeek.com/xmlapi2/collection?username=#{name}&stats=1" ) do |uri|
@@ -245,6 +251,21 @@ module Cinch
         Nokogiri::XML(File.open(file_url))
       end
 
+      def get_expansion_data_for_user(name, using_cache = false)
+        file_url = "#{@data_dir}#{USERS_SUBDIR}/#{name}.exp.xml"
+        unless File.exists?(file_url)
+          using_cache = false
+        end
+        unless using_cache
+          open(file_url, "w") do |file|
+            open("http://boardgamegeek.com/xmlapi2/collection?username=#{name}&subtype=boardgameexpansion" ) do |uri|
+               file.write(uri.read)
+            end
+          end
+        end
+        Nokogiri::XML(File.open(file_url))
+      end
+      
       def load_community
         users_file = File.open("#{@data_dir}#{USERS_FILE}")
         users = {}
@@ -326,7 +347,7 @@ module Cinch
 
       attr_accessor :name, :top_games, :hot_games, :collection
 
-      def initialize(username, user_xml, collection_xml)
+      def initialize(username, user_xml, collection_xml, expansion_xml)
         self.name       = username
         self.top_games  = user_xml.css("top item").map{ |g| g["name"] }
         self.hot_games  = user_xml.css("hot item").map{ |g| g["name"] }
@@ -339,11 +360,24 @@ module Cinch
           self.collection[g["objectid"]]["want"]      = g.css("status")[0]['want'].to_i
           self.collection[g["objectid"]]["plays"]     = g.css("numplays")[0].content.to_i
           self.collection[g["objectid"]]["rating"]    = g.css("stats")[0].css("rating")[0]['value']
+          self.collection[g["objectid"]]["type"]      = g["subtype"]
         end
+        expansion_xml.css("items item").each do |g| 
+          self.collection[g["objectid"]]["type"]      = g["subtype"]
+        end
+        
       end
 
       def owned
         self.collection.select{ |id, game| game["own"] == 1 }
+      end
+
+      def ownedGames
+        self.collection.select{ |id, game| (game["own"] == 1 && game["type"] == "boardgame") }
+      end
+
+      def ownedExpansions
+        self.collection.select{ |id, game| (game["own"] == 1 && game["type"] == "boardgameexpansion") }
       end
 
       def trading
