@@ -83,8 +83,8 @@ module Cinch
             file.write("#{irc_nick},#{bgg_name}\n")
           end
         end
-        collection_xml = get_collection_data_for_user(username, false)
-        expansion_xml = get_expansion_data_for_user(username, false)
+        collection_xml = get_collection_data_for_user(m, username, false)
+        expansion_xml = get_expansion_data_for_user(m, username, false)
         m.reply "You are now added to the community!", true
       end
 
@@ -231,39 +231,57 @@ module Cinch
 
         search_game_id_str = (game_id.nil? ? "" : "&id=#{game_id}")
         user_xml = Nokogiri::XML(self.connect_to_bgg(m){ open("http://boardgamegeek.com/xmlapi2/user?name=#{name}&hot=1&top=1#{search_game_id_str}")}.read)
-        collection_xml = get_collection_data_for_user(name, use_cache)
-        expansion_xml = get_expansion_data_for_user(name, use_cache)
+        collection_xml = get_collection_data_for_user(m, name, use_cache)
+        expansion_xml = get_expansion_data_for_user(m, name, use_cache)
         User.new(name, user_xml, collection_xml, expansion_xml)
       end
 
-      def get_collection_data_for_user(name, using_cache = false)
+      def get_collection_data_for_user(m, name, using_cache = false)
         file_url = "#{@data_dir}#{USERS_SUBDIR}/#{name}.xml"
         unless File.exists?(file_url)
           using_cache = false
         end
-        unless using_cache
-          open(file_url, "w") do |file|
-            open("http://boardgamegeek.com/xmlapi2/collection?username=#{name}&stats=1" ) do |uri|
-               file.write(uri.read)
-            end
+        if using_cache
+          cache = File.open(file_url).read
+          if cache.match(/Your request for this collection has been accepted/)
+            using_cache = false
           end
         end
-        Nokogiri::XML(File.open(file_url))
+        unless using_cache
+          cache = self.connect_to_bgg(m){open("http://boardgamegeek.com/xmlapi2/collection?username=#{name}&stats=1" )}.read
+          while cache.match(/Your request for this collection has been accepted/) do
+            sleep(5)
+            cache = self.connect_to_bgg(m){open("http://boardgamegeek.com/xmlapi2/collection?username=#{name}&stats=1" )}.read
+          end
+          open(file_url, "w") do |file|
+               file.write(cache)
+          end
+        end
+        Nokogiri::XML(cache)
       end
 
-      def get_expansion_data_for_user(name, using_cache = false)
+      def get_expansion_data_for_user(m, name, using_cache = false)
         file_url = "#{@data_dir}#{USERS_SUBDIR}/#{name}.exp.xml"
         unless File.exists?(file_url)
           using_cache = false
         end
-        unless using_cache
-          open(file_url, "w") do |file|
-            open("http://boardgamegeek.com/xmlapi2/collection?username=#{name}&excludesubtype=boardgameexpansion" ) do |uri|
-               file.write(uri.read)
-            end
+        if using_cache
+          cache = File.open(file_url).read
+          if cache.match(/Your request for this collection has been accepted/)
+            using_cache = false
           end
         end
-        Nokogiri::XML(File.open(file_url))
+        unless using_cache
+          cache = self.connect_to_bgg(m){open("http://boardgamegeek.com/xmlapi2/collection?username=#{name}&excludesubtype=boardgameexpansion" )}.read
+          while cache.match(/Your request for this collection has been accepted/) do
+            sleep(5)
+            cache = self.connect_to_bgg(m){open("http://boardgamegeek.com/xmlapi2/collection?username=#{name}&excludesubtype=boardgameexpansion" )}.read
+          end
+          open(file_url, "w") do |file|
+               file.write(cache)
+          end
+        end
+        Nokogiri::XML(cache)
       end
       
       def load_community
@@ -363,7 +381,9 @@ module Cinch
           self.collection[g["objectid"]]["type"]      = "boardgameexpansion"
         end
         expansion_xml.css("items item").each do |g| 
-          self.collection[g["objectid"]]["type"]      = "boardgame"
+          unless self.collection[g["objectid"]].nil?
+            self.collection[g["objectid"]]["type"]      = "boardgame"
+          end
         end
         
       end
