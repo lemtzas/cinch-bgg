@@ -242,10 +242,11 @@ module Cinch
           using_cache = false
         end
         if using_cache
-          cache = File.open(file_url).read
-          if cache.match(/Your request for this collection has been accepted/)
-            using_cache = false
-          end
+         cache = File.open(file_url).read
+         # Now that all files are valid when downloaded, this isn't needed. Should improve performance.
+         # if cache.match(/Your request for this collection has been accepted/)
+         #   using_cache = false
+         # end
         end
         unless using_cache
           cache = self.connect_to_bgg(m){open("http://boardgamegeek.com/xmlapi2/collection?username=#{name}&stats=1" )}.read
@@ -267,9 +268,10 @@ module Cinch
         end
         if using_cache
           cache = File.open(file_url).read
-          if cache.match(/Your request for this collection has been accepted/)
-            using_cache = false
-          end
+         # Now that all files are valid when downloaded, this isn't needed. Should improve performance.
+         # if cache.match(/Your request for this collection has been accepted/)
+         #   using_cache = false
+         # end
         end
         unless using_cache
           cache = self.connect_to_bgg(m){open("http://boardgamegeek.com/xmlapi2/collection?username=#{name}&excludesubtype=boardgameexpansion" )}.read
