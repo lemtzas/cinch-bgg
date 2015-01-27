@@ -73,7 +73,7 @@ module Cinch
 
       def show_user_details(m, user)
         top5 = (user.top_games.empty? ? "" : "- Top 5: #{user.top_games.first(5).join(", ")} ")
-        m.reply "#{user.name} - Collection: #{user.ownedGames.size}g #{user.ownedExpansions.size}e #{top5}- http://boardgamegeek.com/user/#{user.name}", true
+        m.reply "#{user.name} - Collection: #{user.ownedGames.size}g #{user.ownedExpansions.size}e (#{user.unplayed.size}u) #{top5}- http://boardgamegeek.com/user/#{user.name}", true
       end
 
       def link_to_bgg(m, username)
@@ -112,7 +112,7 @@ module Cinch
         game = search_bgg(m, title)
         unless game.nil?
           community = @community.dup
-          community.each{ |irc, bgg| community[irc] = search_for_user(m, bgg, { :id => game.id, :use_cache => true }) }
+          community.each{ |irc, bgg| community[irc] = search_for_user(m, bgg, { :use_cache => true }) }
 
           community.keep_if{ |irc, user| user.send(action).include? game.id.to_s }
           user_info = []
@@ -227,13 +227,32 @@ module Cinch
 
       def search_for_user(m, name, collection_options = {})
         use_cache = collection_options[:use_cache] || false
-        game_id   = collection_options[:id] || nil
 
-        search_game_id_str = (game_id.nil? ? "" : "&id=#{game_id}")
-        user_xml = Nokogiri::XML(self.connect_to_bgg(m){ open("http://boardgamegeek.com/xmlapi2/user?name=#{name}&hot=1&top=1#{search_game_id_str}")}.read)
+        user_xml = get_user_data_for_user(m, name, use_cache)
         collection_xml = get_collection_data_for_user(m, name, use_cache)
         expansion_xml = get_expansion_data_for_user(m, name, use_cache)
         User.new(name, user_xml, collection_xml, expansion_xml)
+      end
+
+      def get_user_data_for_user(m, name, using_cache = false)
+        file_url = "#{@data_dir}#{USERS_SUBDIR}/#{name}.info.xml"
+        unless File.exists?(file_url)
+          using_cache = false
+        end
+        if using_cache
+         cache = File.open(file_url).read
+         # Now that all files are valid when downloaded, this isn't needed. Should improve performance.
+         # if cache.match(/Your request for this collection has been accepted/)
+         #   using_cache = false
+         # end
+        end
+        unless using_cache
+          cache = self.connect_to_bgg(m){ open("http://boardgamegeek.com/xmlapi2/user?name=#{name}&hot=1&top=1")}.read
+          open(file_url, "w") do |file|
+            file.write(cache)
+          end
+        end
+        Nokogiri::XML(cache)
       end
 
       def get_collection_data_for_user(m, name, using_cache = false)
@@ -416,6 +435,10 @@ module Cinch
 
       def played
         self.collection.select{ |id, game| game["plays"] > 0 }
+      end
+
+      def unplayed
+        self.collection.select{ |id, game| (game["own"] == 1 && game["type"] == "boardgame" && game["plays"] == 0) }
       end
 
     end
